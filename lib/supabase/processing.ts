@@ -69,12 +69,24 @@ export async function processDocumentText(documentId: string, storagePath: strin
       }
     }
 
+    // 3.2. Statically register the PDFJS worker module in memory by dynamically importing
+    // pdfjs-dist/legacy/build/pdf.worker.mjs. This ensures Next.js bundles and copies it in production,
+    // and eliminates filesystem loader errors on Vercel.
+    // @ts-ignore
+    await import('pdfjs-dist/legacy/build/pdf.worker.mjs')
+
     // Dynamically import pdf-parse at runtime to optimize Next.js compile-time trace memory
     const pdf = await import('pdf-parse')
     const pdfModule = (pdf as any).default || pdf
     const PDFParseClass = pdfModule.PDFParse || pdf.PDFParse
     if (!PDFParseClass) {
       throw new Error('PDFParse constructor class could not be resolved from pdf-parse module.')
+    }
+
+    // Explicitly configure GlobalWorkerOptions.workerSrc to a dummy string to bypass path checks
+    // and force PDFJS to instantly use the worker already registered in memory.
+    if (typeof PDFParseClass.setWorker === 'function') {
+      PDFParseClass.setWorker('dummy-worker-src')
     }
 
     const parserInstance = new PDFParseClass({ data: buffer })
