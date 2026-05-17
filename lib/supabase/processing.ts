@@ -28,6 +28,47 @@ export async function processDocumentText(documentId: string, storagePath: strin
     const arrayBuffer = await fileData.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     
+    // 3.1. High-fidelity Server-Side Render (SSR) polyfills for browser-only globals (DOMMatrix, window, self, document)
+    // to prevent pdfjs-dist/pdf-parse from crashing during Next.js serverless execution on Vercel.
+    if (typeof global !== 'undefined') {
+      if (!('DOMMatrix' in global)) {
+        (global as any).DOMMatrix = class DOMMatrix {
+          a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+          constructor(init?: string | number[]) {
+            if (Array.isArray(init)) {
+              this.a = init[0] ?? 1;
+              this.b = init[1] ?? 0;
+              this.c = init[2] ?? 0;
+              this.d = init[3] ?? 1;
+              this.e = init[4] ?? 0;
+              this.f = init[5] ?? 0;
+            }
+          }
+        };
+      }
+      if (!('self' in global)) {
+        (global as any).self = global;
+      }
+      if (!('window' in global)) {
+        (global as any).window = global;
+      }
+      if (!('document' in global)) {
+        (global as any).document = {
+          createElement: () => ({
+            getContext: () => ({
+              drawImage: () => {},
+              putImageData: () => {},
+              createImageData: () => ({}),
+              setTransform: () => {},
+              scale: () => {},
+              translate: () => {},
+              rotate: () => {},
+            }),
+          }),
+        };
+      }
+    }
+
     // Dynamically import pdf-parse at runtime to optimize Next.js compile-time trace memory
     const pdf = await import('pdf-parse')
     const pdfModule = (pdf as any).default || pdf
