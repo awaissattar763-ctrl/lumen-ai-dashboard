@@ -101,6 +101,23 @@ export async function saveDocumentMetadata(metadata: {
     return { error: 'Unauthorized. You must be signed in to perform this action.' }
   }
 
+  // Check for duplicates by name and size
+  const { data: existingDocs, error: checkError } = await supabase
+    .from('documents')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('file_name', metadata.file_name)
+    .eq('file_size', metadata.file_size)
+    .limit(1)
+
+  if (checkError) {
+    return { error: 'Failed to verify document uniqueness.' }
+  }
+
+  if (existingDocs && existingDocs.length > 0) {
+    return { error: 'Duplicate Document: A file with this exact name and size has already been uploaded.' }
+  }
+
   const { data, error } = await supabase
     .from('documents')
     .insert({
@@ -185,6 +202,7 @@ export async function getUserChats() {
   const { data, error } = await supabase
     .from('chats')
     .select('*')
+    .eq('user_id', user.id)
     .order('updated_at', { ascending: false })
 
   if (error) {
@@ -209,6 +227,7 @@ export async function getChatMessages(chatId: string) {
     .from('messages')
     .select('*')
     .eq('chat_id', chatId)
+    .eq('user_id', user.id)
     .order('created_at', { ascending: true })
 
   if (error) {

@@ -458,8 +458,9 @@ export default function DashboardPage() {
                   const calculatedPages = Math.max(1, Math.floor(doc.file_size / 35000));
                   const fileType = doc.file_name.split(".").pop()?.toUpperCase() || "PDF";
                   return (
-                    <div
+                    <Link
                       key={doc.id}
+                      href={`/dashboard/chat?docId=${doc.id}`}
                       className="flex items-center gap-4 py-3.5 px-2 -mx-2 rounded-xl hover:bg-secondary/60 transition-colors cursor-pointer group"
                     >
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary border border-border/40">
@@ -469,7 +470,7 @@ export default function DashboardPage() {
                         />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{doc.file_name}</p>
+                        <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{doc.file_name}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {fileType} · {calculatedPages} pages · {formatSize(doc.file_size)}
                         </p>
@@ -484,17 +485,23 @@ export default function DashboardPage() {
                           Indexed
                         </Badge>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(doc.id, doc.storage_path);
-                        }}
-                        className="h-8 w-8 rounded-full hover:bg-red-50 hover:text-red-600 flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 transition-all duration-200"
-                        title="Delete Document"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-all duration-200 gap-1 shrink-0">
+                        <Button variant="ghost" size="sm" className="h-8 text-xs font-medium text-primary hidden md:flex">
+                          Continue chat <ArrowRight className="ml-1 h-3 w-3" />
+                        </Button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDelete(doc.id, doc.storage_path);
+                          }}
+                          className="h-8 w-8 rounded-full hover:bg-red-50 hover:text-red-600 flex items-center justify-center text-muted-foreground"
+                          title="Delete Document"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </Link>
                   );
                 })
               )}
@@ -511,10 +518,15 @@ export default function DashboardPage() {
             </div>
             <div className="space-y-4">
               {recentQueries.map((item, i) => (
-                <div key={i} className="group">
-                  <p className="text-sm font-medium leading-relaxed group-hover:text-primary transition-colors cursor-pointer">
-                    {item.q}
-                  </p>
+                <Link key={i} href="/dashboard/chat" className="group block">
+                  <div className="flex items-start justify-between">
+                    <p className="text-sm font-medium leading-relaxed group-hover:text-primary transition-colors cursor-pointer">
+                      {item.q}
+                    </p>
+                    <span className="text-[10px] font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2 mt-0.5">
+                      Ask again →
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between mt-1.5">
                     <p className="text-xs text-muted-foreground truncate max-w-[180px]">
                       {item.doc}
@@ -524,9 +536,9 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   {i < recentQueries.length - 1 && (
-                    <div className="border-b border-border/60 mt-4" />
+                    <div className="border-b border-border/60 mt-4 group-hover:border-border/30 transition-colors" />
                   )}
-                </div>
+                </Link>
               ))}
             </div>
             <Button variant="ghost" size="sm" className="w-full mt-6 -mb-2" asChild>

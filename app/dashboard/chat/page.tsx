@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import React, { useEffect, useState, useRef, useCallback, memo } from "react";
+import { useSearchParams } from "next/navigation";
+import React, { useEffect, useState, useRef, useCallback, memo, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
 import { Navbar } from "@/components/navbar";
@@ -471,7 +472,10 @@ MessageItem.displayName = "MessageItem";
    MAIN HIGH-PERFORMANCE WORKSPACE CHAT CONTEXT
    ========================================================================== */
 
-export default function WorkspaceChatPage() {
+function WorkspaceChatContent() {
+  const searchParams = useSearchParams();
+  const targetDocId = searchParams?.get("docId");
+
   const [user, setUser] = useState<User | null>(null);
   const [documents, setDocuments] = useState<DbDocument[]>([]);
   const [selectedDocIds, setSelectedDocIds] = useState<string[]>([]);
@@ -543,31 +547,24 @@ export default function WorkspaceChatPage() {
           const loadedDocs = (docsRes.data as DbDocument[]) || [];
           setDocuments(loadedDocs);
 
-          // Retrieve active selections from localStorage
-          if (loadedDocs.length > 0) {
-            const savedIds = localStorage.getItem("lumen_selected_doc_ids");
-            if (savedIds) {
-              try {
-                const parsed = JSON.parse(savedIds);
-                if (Array.isArray(parsed)) {
-                  const validIds = parsed.filter((id) => loadedDocs.some((d) => d.id === id));
-                  setSelectedDocIds(validIds);
-                } else {
-                  setSelectedDocIds(loadedDocs.map((d) => d.id));
-                }
-              } catch (e) {
-                setSelectedDocIds(loadedDocs.map((d) => d.id));
-              }
-            } else {
-              setSelectedDocIds(loadedDocs.map((d) => d.id));
-            }
-          }
-
           const sortedChats = (chatsRes.data as ChatSession[]) || [];
           setChats(sortedChats);
 
           if (sortedChats.length > 0) {
-            setActiveChatId(sortedChats[0].id);
+            let nextActiveId = sortedChats[0].id;
+            
+            // Smart Workspace Resume: Try to find a chat thread that already has this document selected
+            if (targetDocId) {
+              for (const chat of sortedChats) {
+                const saved = localStorage.getItem(`lumen_chat_docs_${chat.id}`);
+                if (saved && saved.includes(targetDocId)) {
+                  nextActiveId = chat.id;
+                  break;
+                }
+              }
+            }
+            
+            setActiveChatId(nextActiveId);
           } else {
             // Auto create General Analysis chat thread if empty
             const { data: newChat } = await supabase
@@ -591,6 +588,63 @@ export default function WorkspaceChatPage() {
 
     initWorkspace();
   }, [supabase]);
+
+  // Handle per-chat document selection & smart targeting
+  useEffect(() => {
+    if (!activeChatId || documents.length === 0) return;
+
+    // If smart resume via URL param
+    if (targetDocId && documents.some(d => d.id === targetDocId)) {
+      setSelectedDocIds([targetDocId]);
+      // Remove it from URL so we don't lock the user into it on reload
+      window.history.replaceState(null, '', '/dashboard/chat');
+      return;
+    }
+
+    // Load chat-specific selection from persistent storage
+    const savedIds = localStorage.getItem(`lumen_chat_docs_${activeChatId}`);
+    if (savedIds) {
+      try {
+        const parsed = JSON.parse(savedIds);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const validIds = parsed.filter((id) => documents.some((d) => d.id === id));
+          if (validIds.length > 0) {
+            setSelectedDocIds(validIds);
+            return;
+          }
+        }
+      } catch (e) {
+        // ignore JSON parse error
+      }
+    }
+    
+    // Fallback: Check global legacy selection (e.g. from upload page purge)
+    const legacyIds = localStorage.getItem("lumen_selected_doc_ids");
+    if (legacyIds) {
+      try {
+        const parsedLegacy = JSON.parse(legacyIds);
+        if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+          const validLegacy = parsedLegacy.filter((id) => documents.some((d) => d.id === id));
+          if (validLegacy.length > 0) {
+            setSelectedDocIds(validLegacy);
+            return;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Default to all documents
+    setSelectedDocIds(documents.map((d) => d.id));
+  }, [activeChatId, documents, targetDocId]);
+
+  // Save chat-specific document selection when it changes
+  useEffect(() => {
+    if (activeChatId && selectedDocIds.length > 0) {
+      localStorage.setItem(`lumen_chat_docs_${activeChatId}`, JSON.stringify(selectedDocIds));
+    }
+  }, [selectedDocIds, activeChatId]);
 
   // Load chat messages when active room switches
   useEffect(() => {
@@ -750,18 +804,22 @@ export default function WorkspaceChatPage() {
   const toggleDocSelection = useCallback((id: string) => {
     setSelectedDocIds((prev) => {
       const updated = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
-      localStorage.setItem("lumen_selected_doc_ids", JSON.stringify(updated));
+      if (activeChatId) {
+        localStorage.setItem(`lumen_chat_docs_${activeChatId}`, JSON.stringify(updated));
+      }
       return updated;
     });
-  }, []);
+  }, [activeChatId]);
 
   const toggleSelectAll = useCallback(() => {
     setSelectedDocIds((prev) => {
       const updated = prev.length === documents.length ? [] : documents.map((d) => d.id);
-      localStorage.setItem("lumen_selected_doc_ids", JSON.stringify(updated));
+      if (activeChatId) {
+        localStorage.setItem(`lumen_chat_docs_${activeChatId}`, JSON.stringify(updated));
+      }
       return updated;
     });
-  }, [documents]);
+  }, [documents, activeChatId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1666,5 +1724,20 @@ export default function WorkspaceChatPage() {
         </div>
       )}
     </>
+  );
+}
+
+export default function WorkspaceChatPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-screen w-full items-center justify-center bg-background">
+        <div className="flex flex-col items-center justify-center gap-4 animate-pulse">
+          <div className="h-10 w-10 rounded-xl bg-secondary/50 animate-bounce" />
+          <p className="text-sm font-medium text-muted-foreground">Initializing Workspace...</p>
+        </div>
+      </div>
+    }>
+      <WorkspaceChatContent />
+    </Suspense>
   );
 }

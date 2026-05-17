@@ -89,12 +89,13 @@ export default function UploadPage() {
 
     setFiles((prev) => [...newFilesState, ...prev]);
 
-    // Process each file upload in parallel
+    // Process each file upload in parallel, storing ref for retry
     filesArray.forEach((file, index) => {
       const fileState = newFilesState[index];
+      fileMapRef.current.set(fileState.id, file);
       uploadFileToSupabase(file, fileState.id);
     });
-  }, [user, supabase]);
+  }, [user, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const uploadFileToSupabase = async (file: File, fileId: string) => {
     if (!user) return;
@@ -142,6 +143,21 @@ export default function UploadPage() {
       });
 
       if (dbResult && dbResult.error) {
+        // If duplicate, treat as "already ready" — not a hard failure
+        if (dbResult.error.startsWith('Duplicate Document')) {
+          const calculatedPages = Math.max(1, Math.floor(file.size / 35000));
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.id === fileId
+                ? { ...f, status: "done", pages: calculatedPages }
+                : f
+            )
+          );
+          setToast({ message: `${file.name} is already in your library — opening workspace.`, type: "info" });
+          // Remove from storage since we didn't insert to DB
+          await supabase.storage.from('documents').remove([storagePath]);
+          return;
+        }
         throw new Error(dbResult.error);
       }
 
@@ -199,6 +215,21 @@ export default function UploadPage() {
     }
   };
 
+  const fileMapRef = useRef<Map<string, File>>(new Map());
+
+  const handleRetry = useCallback((fileId: string) => {
+    const originalFile = fileMapRef.current.get(fileId);
+    if (!originalFile) return;
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.id === fileId
+          ? { ...f, status: "uploading", progress: 0, errorMessage: undefined }
+          : f
+      )
+    );
+    uploadFileToSupabase(originalFile, fileId);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -210,6 +241,7 @@ export default function UploadPage() {
 
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
+    fileMapRef.current.delete(id);
   };
 
   return (
@@ -336,7 +368,7 @@ export default function UploadPage() {
 
             <div className="space-y-2.5">
               {files.map((file) => (
-                <FileRow key={file.id} file={file} onRemove={removeFile} />
+                <FileRow key={file.id} file={file} onRemove={removeFile} onRetry={handleRetry} />
               ))}
             </div>
 
@@ -456,9 +488,11 @@ export default function UploadPage() {
 function FileRow({
   file,
   onRemove,
+  onRetry,
 }: {
   file: FileState;
   onRemove: (id: string) => void;
+  onRetry?: (id: string) => void;
 }) {
   return (
     <Card className="p-4 flex items-center gap-4 transition-all hover:shadow-apple-md group">
@@ -466,7 +500,7 @@ function FileRow({
         <FileText
           className={cn(
             "h-5 w-5 transition-colors",
-            file.status === "done" ? "text-primary" : "text-muted-foreground"
+            file.status === "done" ? "text-primary" : file.status === "error" ? "text-red-500" : "text-muted-foreground"
           )}
           strokeWidth={1.8}
         />
@@ -511,8 +545,19 @@ function FileRow({
             <Check className="h-4 w-4" strokeWidth={2.5} />
           </div>
         ) : file.status === "error" ? (
-          <div className="h-8 w-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs">
-            !
+          <div className="flex items-center gap-2">
+            {onRetry && (
+              <button
+                onClick={() => onRetry(file.id)}
+                className="h-8 px-3 rounded-full bg-red-50 text-red-600 hover:bg-red-100 text-xs font-medium transition-colors border border-red-200"
+                title="Retry upload"
+              >
+                Retry
+              </button>
+            )}
+            <div className="h-8 w-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs">
+              !
+            </div>
           </div>
         ) : (
           <div className="h-8 w-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
