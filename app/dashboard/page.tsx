@@ -209,22 +209,28 @@ export default function DashboardPage() {
               <span className="text-primary">.</span>
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/chat" className="relative block group">
+          <div className="flex items-center gap-3">
+            <Link href="/dashboard/chat" className="hidden md:block relative group">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
               <Input
                 placeholder="Ask anything…"
                 readOnly
-                className="pl-10 w-72 h-10 rounded-full bg-secondary/60 border-transparent focus-visible:bg-white cursor-pointer group-hover:border-primary/20 transition-all"
+                className="pl-10 w-64 h-10 rounded-full bg-secondary/60 border-transparent focus-visible:bg-white cursor-pointer group-hover:border-primary/20 transition-all"
               />
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-muted-foreground bg-white border border-border rounded px-1.5 py-0.5">
                 ⌘K
               </kbd>
             </Link>
-            <Button asChild>
+            <Button variant="secondary" asChild className="rounded-full">
               <Link href="/upload">
-                <Upload className="h-4 w-4 mr-1" />
+                <Upload className="h-4 w-4 mr-1.5" />
                 Upload
+              </Link>
+            </Button>
+            <Button asChild className="rounded-full shadow-sm">
+              <Link href="/dashboard/chat">
+                <Sparkles className="h-4 w-4 mr-1.5" />
+                Open AI Workspace
               </Link>
             </Button>
           </div>
@@ -523,9 +529,11 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-            <Button variant="ghost" size="sm" className="w-full mt-6 -mb-2">
-              View all queries
-              <ArrowRight className="ml-1 h-3.5 w-3.5" />
+            <Button variant="ghost" size="sm" className="w-full mt-6 -mb-2" asChild>
+              <Link href="/dashboard/chat">
+                View all queries
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
             </Button>
           </Card>
         </div>

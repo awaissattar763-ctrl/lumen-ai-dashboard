@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import Link from "next/link";
 import { Navbar } from "@/components/navbar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -342,10 +343,15 @@ export default function UploadPage() {
             {files.some((f) => f.status === "done") && (
               <div className="mt-8 flex justify-end">
                 <Button size="lg" asChild>
-                  <a href="/dashboard">
+                  <Link 
+                    href="/dashboard/chat"
+                    onClick={() => {
+                      localStorage.removeItem("lumen_selected_doc_ids");
+                    }}
+                  >
                     Open workspace
                     <ArrowRight className="ml-1 h-4 w-4" />
-                  </a>
+                  </Link>
                 </Button>
               </div>
             )}
